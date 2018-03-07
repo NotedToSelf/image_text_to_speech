@@ -1,0 +1,10 @@
+To do:
+- Implement paper to isolate text in complex images
+- Write script(s) to augment data
+- Implement neural net to identify text segments in image
+- Implement nerual net to identify characters (EMNIST data set)
+
+strech:
+- Implement neural net to identify words
+- Use python package to convert text to speech
+- put everything together
