@@ -6,7 +6,7 @@ import numpy as np
 import skimage.restoration
 
 #original image
-image = cv2.imread('./Input.jpg', 0) 
+image = cv2.imread('./Input.png', 0) 
 
 #remove background texture
 #image = cv2.blur(image, (8,8))
