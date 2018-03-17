@@ -21,6 +21,7 @@ _, invert_gray = cv2.threshold(invert_gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH
 
 
 #pick the correct binary image
+#I just sum up the white pixels below a threshold and use the greater
 sum_orig = 0
 sum_invert = 0
 rows, cols = image.shape
@@ -35,17 +36,27 @@ if (sum_orig < sum_invert):
 	image = invert_gray
 
 
-contours = cv2.findContours(image.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+_, contours, _ = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-for i in range(len(contours)):
-	peri = cv2.arcLength(contours[i].astype(np.float32), True)
-	approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-	cv2.drawContours(image, [approx], -1, (0, 255, 0), 2)
+#Remove the background as a contur to preserve averages:
+contours = contours[1:]
 
-#Erode and Dialate, or find some way to remove remaining non character objects
+#Find the average height and width of contours
+max_w = 0
+max_h = 0
+for cont in contours:
+	x,y,w,h = cv2.boundingRect(cont)
+	if w > max_w:
+		max_w = w
+	if h > max_h:
+		max_h = h
 
 
-#Text region detection
-
-
-cv2.imwrite(filename='./Output.jpg', img=image)
+#Crop out the valid contours and write them
+char_count = 0
+for cont in contours:
+	x,y,w,h = cv2.boundingRect(cont)
+	if w >= max_w - 40 and w <= max_w + 40 and h >= max_h - 20 and h <= max_h + 20:
+		char_count+=1
+		output = image[y:y+h, x:x+w]
+		cv2.imwrite(str(char_count) + '.png', output)
