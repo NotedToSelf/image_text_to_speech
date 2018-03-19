@@ -87,7 +87,7 @@ for cont in conts:
 		output = image[y:y+h, x:x+w]
 		output = cv2.bitwise_not(output)
 		r,c = output.shape
-		cv2.imwrite('./data/' + str(char_count+50) + '.png', output)
+		cv2.imwrite('./data0/' + str(char_count+50) + '.png', output)
 		#pad the image with black border
 		horiz = int((max_size - r) / 2)
 		vert = int((max_size - c) / 2)
