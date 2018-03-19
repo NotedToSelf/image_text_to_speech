@@ -20,75 +20,74 @@ start_epoch = 0
 resume = './emnist/checkpoint.pth.tar'
 
 
+Train = torch.utils.data.DataLoader(
+	batch_size=64,
+	shuffle=False,
+	num_workers=1,
+	pin_memory=False,
+	dataset=torchvision.datasets.EMNIST(
+		root='./emnist/',
+		split='letters',
+		train=False,
+		download=True,
+		transform=torchvision.transforms.Compose([
+			torchvision.transforms.ToTensor(),
+		torchvision.transforms.Normalize(tuple([ 0.1307 ]), tuple([ 0.3081 ]))
+		])
+	)
+)
 
 
-#SOURCE for converting from MAT to Python format: github.com/j05t/emnist/blob/master/emnist.ipynbdddd
+Validate = torch.utils.data.DataLoader(
+	batch_size=64,
+	shuffle=True,
+	num_workers=1,
+	pin_memory=False,
+	dataset=torchvision.datasets.EMNIST(
+		root='./emnist/',
+		split='letters',
+		train=False,
+		download=True,
+		transform=torchvision.transforms.Compose([
+			torchvision.transforms.ToTensor()
+		])
+	)
+)
 
 
-#read in MAT format dataset
-emnist = scipy.io.loadmat('./emnist/data/letters.mat')
+ObjectOptimizer = torch.optim.Adam(params=moduleNetwork.parameters(), lr=0.001)
 
-#extract data
-training_data = emnist["dataset"][0][0][0][0][0][0]
-training_data = training_data.astype(np.float32)
-training_labels = emnist["dataset"][0][0][0][0][0][1]
-
-test_data = emnist["dataset"][0][0][1][0][0][0]
-test_data = test_data.astype(np.float32)
-test_labels = emnist["dataset"][0][0][1][0][0][1]
-
-#normalize
-training_data /= 255
-test_data /= 255
-
-#reshape from matlab order to python order
-training_data = training_data.reshape(training_data.shape[0], 1, 28, 28, order="A")
-test_data = test_data.reshape(test_data.shape[0], 1, 28, 28, order="A")
-
-
-#Some tests that data is loaded correctly:
-if False:
-	print('training data: ' + str(training_data.shape))
-	print('training labels: ' + str(training_labels.shape))
-	print('test data: ' + str(test_data.shape))
-	print('test labels: ' + str(test_labels.shape))
-	test_im = training_data[1277]
-	print(test_labels[1277][0])
-	cv2.imwrite(filename='./test.png', img=(test_im[0] * 255.0).clip(0.0, 255.0).astype(np.uint8))
-
-
-
-#Define the Network:
-class Network(torch.nn.Module):
-
+#Define the network
+class Network(torch.nn.module):
 	def __init__(self):
 		super(Network, self).__init__()
-
-		self.conv1 = torch.nn.Conv2d(1,32, kernel_size=5)
-		self.conv2 = torch.nn.Conv2d(32,64, kernel_size=5)
-		self.fc1 = torch.nn.Linear(256, 200)
-		self.fc2 = torch.nn.Linear(200,10)
+		
+		self.bn = torch.nn.Batchnorm2d(1)
+		self.conv1 = torch.nn.conv2d(1, 64, kernel_size = 5)
+		self.conv2 = torch.nn.conv2d(64, 512, kernel_size = 5)
+		self.linear1(2048, 256)
+		self.linear2(256, 128)
+		self.linear2(128, 26)
 
 	def forward(self, x):
-		x = self.conv1(x)
+		x = self.bn(x)
+		x = self.conv1(x)	#-1, 64, 24, 24
 		x = torch.nn.functional.relu(x)
-		x = torch.nn.functional.max_pool2d(x, kernel_size=3)
-		x = self.conv2(x)
+		x = torch.nn.functional.max_pool2d(x, kernel_size = 3) #-1, 64, 8, 8
+		x = self.conv2(x)	#-1, 512, 4, 4
 		x = torch.nn.functional.relu(x)
-		x = torch.nn.functional.max_pool2d(x, kernel_size=2)
-		x = x.view(-1, 256)
-		x = self.fc1(x)
+		x = torch.nn.functional.max_pool2d(x, kernel_size = 2) #-1, 512, 2, 2
+		x = view(-1, 2048) #-1, 2048
+		x = linear1(x) #-1. 256
+		x = torch.nn.functional.dropout(x, p=0.35, training=self.training)
 		x = torch.nn.functional.relu(x)
-		x = self.fc2(x)
+		x = self.linear2(x) #-1, 128
+		x = torch.nn.functional.droupout(x, p=0.32, training=self.training)
+		x = torch.nn.functional.relu(x)
+		x = self.linear3(x) #-1, 26
 
 		return torch.nn.functional.log_softmax(x, dim=1)
-
-
-
-emnistNetwork = Network().cuda()
-
-objectOptimizer = torch.optim.Adam(params=emnistNetwork.parameters(), lr=0.001)
-
+		
 
 #If a checkpoint is stored, resume from there
 if os.path.isfile(resume):
@@ -103,11 +102,10 @@ def train():
 	emnistNetwork.train()
 
 	for tensorInput, tensorTarget in tqdm.tqdm(Train):
-		variableInput = torch.autograd.Variable(data=tensorInput, volatile=False).cuda()
-		variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=False).cuda()
-		
+		variableInput = torch.autograd.Variable(data=tensorInput, volatile=False)#.cuda()
+		variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=False)#.cuda()
 		objectOptimizer.zero_grad()
-		variableEstimate = emnistNetwork(variableInput)
+		variableEstimate = moduleNetwork(variableInput)
 		variableLoss = torch.nn.functional.nll_loss(input=variableEstimate, target=variableTarget)
 		variableLoss.backward()
 		objectOptimizer.step()
@@ -119,33 +117,25 @@ def evaluate():
 
 	intTrain = 0
 	intValidation = 0
-
 	for tensorInput, tensorTarget in Train:
-		variableInput = torch.autograd.Variable(data=tensorInput, volatile=True).cuda()
-		variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=True).cuda()
-		variableEstimate = emnistNetwork(variableInput)
+		variableInput = torch.autograd.Variable(data=tensorInput, volatile=True)#.cuda()
+		variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=True)#.cuda()
+		variableEstimate = moduleNetwork(variableInput)
+		intTrain += variableEstimate.data.max(dim=1,keepdim=False)[1].eq(variableTarget.data).sum()
 
-		intTrain += variableEstimate.data.max(dim=1, keepdim=False)[1].eq(variableTarget.data).sum()
+	for tensorInput, tensorTarget in Validate:
+		variableInput = torch.autograd.Variable(data=tensorInput,volatile=True)#.cuda()
+		variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=True)#.cuda()
+		intValidation += variableEstimate.data.max(dim=1,keepdim=False)[1].eq(variableTarget.data).sum()
 
-	for tensorInput, tensorTarget in Validation:
-		variableInput = torch.autograd.Variable(data=tensorInput, volatile=True).cuda()
-		variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=True).cuda()
-		variableEstimate = emnistNetwork(variableInput)
-		
-		intValidation += variableEstimate.data.max(dim=1, keepdim=False)[1].eq(variableTarget.data).sum()
+		dblTrain.append(100.0 * intTrain / len(Train.dataset))
+		dblValidation.append(100.0 * intValidation / len(Validate.dataset))
 
-	#Determine accuracy
-	dblTrain.append(100.0 * intTrain / len(Train.dataset))
-	dblValidation.append(100.0 * intValidation / len(Validation.dataset))
-
-	#Display data
-	print('')
-	print('train: ' + str(intTrain) + '/' + str(len(Train.dataset)) + ' (' + str(dblTrain[-1]) + '%)')
-	print('validation: ' + str(intValidation) + '/' + str(len(Validation.dataset)) + ' (' + str(dblValidation[-1]) + '%)')
-	print('')
-
-	#return validation percent for checkpointing
-	return dblValidation[-1]
+		print('')
+		print('train: ' + str(intTrain) + '/' + str(len(Train.dataset))+ ' (' + str(dblTrain[-1]) + '%)')
+		print('validation: ' + str(intValidation) + '/' + str(len(Validate.dataset)) + ' (' + str(dblValidation[-1]) + '%)')
+		print('')
+		return dblValidation[-1]
 
 
 

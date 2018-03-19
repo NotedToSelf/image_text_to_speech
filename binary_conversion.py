@@ -7,44 +7,50 @@ import skimage.restoration
 
 #original image
 image = cv2.imread('./Input.png', 0) 
+rows,cols = image.shape
+area = rows * cols
 
-#remove background texture
-#image = cv2.blur(image, (8,8))
+#Denoise
+#Filter strength 15 will remove noise as well as texture
+image = cv2.fastNlMeansDenoising(image, None, 15, 13)
+cv2.imwrite('./denoise.png', image)
 
 #inverted image
 invert_gray = cv2.bitwise_not(image)
-
+cv2.imwrite('./invert.png', invert_gray)
 
 #Adaptive Thresholding on both images 
 _, image = cv2.threshold(image, 0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 _, invert_gray = cv2.threshold(invert_gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
+cv2.imwrite('./orig_thresh.png', image)
+cv2.imwrite('./invert_thresh.png', invert_gray)
+
 
 #pick the correct binary image
-#I just sum up the white pixels below a threshold and use the greater
 sum_orig = 0
 sum_invert = 0
-rows, cols = image.shape
 for i in range(rows):
 	for j in range(cols):
 		if (image[i][j] > 230):
 			sum_orig += 1
 		if (invert_gray[i][j] > 230):
 			sum_invert += 1 		
-
 if (sum_orig < sum_invert):
 	image = invert_gray
 
 
-_, contours, _ = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-#Remove the background as a contur to preserve averages:
-contours = contours[1:]
+#Obtain list of connected components
+im, conts, _ = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-#Find the average height and width of contours
+#Remove the background as a component:
+conts = conts[1:]
+
+#Find the max height and width of contours
 max_w = 0
 max_h = 0
-for cont in contours:
+for cont in conts:
 	x,y,w,h = cv2.boundingRect(cont)
 	if w > max_w:
 		max_w = w
@@ -52,11 +58,40 @@ for cont in contours:
 		max_h = h
 
 
+#Sort contours
+#Source Credit: https://stackoverflow.com/questions/39403183/python-opencv-sorting-contours
+def precedence(contour, cols):
+	tolerance = 20
+	origin = cv2.boundingRect(contour)
+	return ((origin[1] // tolerance) * tolerance) * cols+ origin[0]
+
+conts.sort(key=lambda x:precedence(x, im.shape[1]))
+
+
+
+#This can be changed to take into account the h and w of neighboring components if text has different sizes
+
+#Find a close multiple of 28 to the size of found characters for padding
+max_size = int((max_h / 28)+1) * 28
+
+#Width tolerance of characters relative to max char size
+w_tolerance = max_w // 1.2 
+h_tolerance = max_h // 2
+
 #Crop out the valid contours and write them
 char_count = 0
-for cont in contours:
+for cont in conts:
 	x,y,w,h = cv2.boundingRect(cont)
-	if w >= max_w - 40 and w <= max_w + 40 and h >= max_h - 20 and h <= max_h + 20:
+	if w >= max_w - w_tolerance and w <= max_w + w_tolerance and h >= max_h - h_tolerance and h <= max_h + h_tolerance:
 		char_count+=1
 		output = image[y:y+h, x:x+w]
-		cv2.imwrite(str(char_count) + '.png', output)
+		output = cv2.bitwise_not(output)
+		r,c = output.shape
+		cv2.imwrite('./data/' + str(char_count+50) + '.png', output)
+		#pad the image with black border
+		horiz = int((max_size - r) / 2)
+		vert = int((max_size - c) / 2)
+		output = cv2.copyMakeBorder(output, horiz, horiz, vert, vert, cv2.BORDER_CONSTANT, value=[0])
+		#resize to desired shape
+		output = cv2.resize(output, (28, 28))
+		cv2.imwrite('./data/' + str(char_count) + '.png', output)
