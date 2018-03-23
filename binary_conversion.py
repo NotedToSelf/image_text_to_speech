@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import skimage.restoration
 
-#original image
+#Read Source Image in grayscale
 image = cv2.imread('./Input.png', 0) 
 rows,cols = image.shape
 area = rows * cols
@@ -13,21 +13,15 @@ area = rows * cols
 #Denoise
 #Filter strength 15 will remove noise as well as texture
 image = cv2.fastNlMeansDenoising(image, None, 15, 13)
-cv2.imwrite('./denoise.png', image)
 
 #inverted image
 invert_gray = cv2.bitwise_not(image)
-cv2.imwrite('./invert.png', invert_gray)
 
 #Adaptive Thresholding on both images 
 _, image = cv2.threshold(image, 0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 _, invert_gray = cv2.threshold(invert_gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-cv2.imwrite('./orig_thresh.png', image)
-cv2.imwrite('./invert_thresh.png', invert_gray)
-
-
-#pick the correct binary image
+#Binary Image Selection
 sum_orig = 0
 sum_invert = 0
 for i in range(rows):
@@ -64,17 +58,12 @@ def precedence(contour, cols):
 	tolerance = 20
 	origin = cv2.boundingRect(contour)
 	return ((origin[1] // tolerance) * tolerance) * cols+ origin[0]
-
 conts.sort(key=lambda x:precedence(x, im.shape[1]))
-
-
-
-#This can be changed to take into account the h and w of neighboring components if text has different sizes
 
 #Find a close multiple of 28 to the size of found characters for padding
 max_size = int((max_h / 28)+1) * 28
 
-#Width tolerance of characters relative to max char size
+#Width and height tolerance of characters relative to max char size
 w_tolerance = max_w // 1.2 
 h_tolerance = max_h // 2
 
@@ -87,11 +76,10 @@ for cont in conts:
 		output = image[y:y+h, x:x+w]
 		output = cv2.bitwise_not(output)
 		r,c = output.shape
-		cv2.imwrite('./data0/' + str(char_count+50) + '.png', output)
 		#pad the image with black border
 		horiz = int((max_size - r) / 2)
 		vert = int((max_size - c) / 2)
 		output = cv2.copyMakeBorder(output, horiz, horiz, vert, vert, cv2.BORDER_CONSTANT, value=[0])
 		#resize to desired shape
 		output = cv2.resize(output, (28, 28))
-		cv2.imwrite('./data/' + str(char_count) + '.png', output)
+		cv2.imwrite('./data/images/' + str(char_count) + '.png', output)
