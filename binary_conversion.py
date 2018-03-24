@@ -4,9 +4,17 @@
 import cv2
 import numpy as np
 import skimage.restoration
+import os
+
+#clear data folder
+cwd = os.getcwd()
+dst = str(cwd) + '/data/images/'
+for files in os.listdir(dst):
+	if '.png' in files:
+		os.remove(str(dst) + str(files))
 
 #Read Source Image in grayscale
-image = cv2.imread('./Input.png', 0) 
+image = cv2.imread('./Input.jpg', 0) 
 rows,cols = image.shape
 area = rows * cols
 
