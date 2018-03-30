@@ -14,7 +14,7 @@ for files in os.listdir(dst):
 		os.remove(str(dst) + str(files))
 
 #Read Source Image in grayscale
-image = cv2.imread('./Input.jpg', 0) 
+image = cv2.imread('./Input.png', 0) 
 rows,cols = image.shape
 area = rows * cols
 

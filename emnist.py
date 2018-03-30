@@ -20,6 +20,7 @@ best_acc = torch.FloatTensor([0])
 start_epoch = 0
 cwd = os.getcwd()
 resume = str(cwd) + '/emnist/checkpoint.pth.tar'
+size = 124800
 data = str(cwd) + '/data/'
 mode = sys.argv[1]
 k = 0
@@ -31,19 +32,22 @@ class Network(torch.nn.Module):
 		super(Network, self).__init__()
 	
 		self.conv1 = torch.nn.Conv2d(1, 32, kernel_size=5)
-		self.conv2 = torch.nn.Conv2d(32, 64, kernel_size=5)
-		self.fc1 = torch.nn.Linear(256, 200)
-		self.fc2 = torch.nn.Linear(200, 26)
+		self.conv2 = torch.nn.Conv2d(32, 64, kernel_size=3)
+		self.conv3 = torch.nn.Conv2d(64, 128, kernel_size=2)
+		self.fc1 = torch.nn.Linear(512, 256)
+		self.fc2 = torch.nn.Linear(256, 26)
 
 
 	def forward(self, x):
 		x = self.conv1(x)
 		x = torch.nn.functional.relu(x)
-		x = torch.nn.functional.max_pool2d(x, kernel_size=3)
+		x = torch.nn.functional.max_pool2d(x, kernel_size=2)#, stride=2)
 		x = self.conv2(x)
 		x = torch.nn.functional.relu(x)
+		x = torch.nn.functional.max_pool2d(x, kernel_size=2)#, stride=2)
+		x = self.conv3(x)
 		x = torch.nn.functional.max_pool2d(x, kernel_size=2)
-		x = x.view(-1, 256)
+		x = x.view(-1, 512)
 		x = self.fc1(x)
 		x = torch.nn.functional.relu(x)
 		x = self.fc2(x)
@@ -67,7 +71,8 @@ else:
 
 objectOptimizer = torch.optim.Adam(params=emnistNetwork.parameters(), lr=0.001)
 
-
+#	Train Mode
+#	Loads EMNIST dataset and trains the network for 100 epochs
 if mode == 'train':
 
 	print('\nStarting in training mode. . .')
@@ -89,7 +94,6 @@ if mode == 'train':
 		)
 	)
 
-
 	Validate = torch.utils.data.DataLoader(
 		batch_size=64,
 		shuffle=True,
@@ -108,12 +112,16 @@ if mode == 'train':
 	)
 
 
-
+	#Split datasets for training and validation
+	#Using 80/20 split
+#	Train.dataset, Validate.dataset = torch.utils.data.dataset.random_split(Train.dataset, [ int( len(Train.dataset)*.80), int(len(Train.dataset)*.20)])
+#	Validate.dataset = torch.utils.data.dataset.random_split(Validate.dataset, [ int( len(Validate.dataset)*.80), int(len(Validate.dataset)*.20)])
+	if True:
+		print('Training length: ' + str(len(Train.dataset)))
+		print('Validate length: ' + str(len(Validate.dataset)))
 
 	def train():
 		#set network to the training mode
-		emnistNetwork.train()
-
 		for tensorInput, tensorTarget in tqdm.tqdm(Train):
 			variableInput = torch.autograd.Variable(data=tensorInput, volatile=False)
 			variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=False)
@@ -132,11 +140,11 @@ if mode == 'train':
 
 		intTrain = 0
 		intValidation = 0
+
 		for tensorInput, tensorTarget in Train:
 			variableInput = torch.autograd.Variable(data=tensorInput, volatile=True)
 			variableTarget = torch.autograd.Variable(data=tensorTarget, volatile=True)
 			variableTarget.data = variableTarget.data-1
-
 			variableEstimate = emnistNetwork(variableInput)
 			intTrain += variableEstimate.data.max(dim=1,keepdim=False)[1].eq(variableTarget.data).sum()
 
@@ -167,9 +175,10 @@ if mode == 'train':
 		else:
 			print('Validation accuracy did not improve')
 
+	
 	#Train for 100 Epochs
 	for epoch in range(100):
-		print('Epoch ' + str(epoch)+ ':')
+		print('Epoch ' + str(start_epoch)+ ':')
 		train()
 		acc = evaluate()
 
@@ -183,11 +192,19 @@ if mode == 'train':
 			'best_accuracy': best_acc
 			}, best)
 
+		start_epoch += 1
+
+
+#	Classification Mode
+#	Searches the data folder for images to classify
+#	Writes classifications to output.txt
 if mode == 'classify':
 	
 	print('\nStarting in classification mode . . .')
 	print('\nLoading data')
 
+	#Set network to eval mode
+	emnistNetwork.eval()
 
 	#Image loader function which reads single channel images
 	def image_loader(path):
@@ -205,8 +222,8 @@ if mode == 'classify':
 		dataset=torchvision.datasets.ImageFolder(
 			root=data,
 			transform=torchvision.transforms.Compose([
-				torchvision.transforms.ToTensor()
-				#torchvision.transforms.Normalize(tuple([ 0.1307 ]), tuple([ 0.3081 ]))
+				torchvision.transforms.ToTensor(),
+				torchvision.transforms.Normalize(tuple([ 0.1307 ]), tuple([ 0.3081 ]))
 			]),
 		loader = image_loader
 		)
@@ -248,10 +265,7 @@ if mode == 'classify':
 	print('\nClassifying data')
 	for tensorInput in objectData:
 		image = tensorInput[0]
-		inp = image[0][0]
-		inp = inp.unsqueeze(0)
-		inp = inp.unsqueeze(0)
-		inp = torch.autograd.Variable(data=inp)
+		inp = torch.autograd.Variable(data=image)
 		estimate = emnistNetwork(inp)
 		num, ind = torch.max(estimate, 1)
 		chars.append(map_to_char(int(ind[0])))
